@@ -1,5 +1,8 @@
 fastapi
 uvicorn[standard]
+python-multipart
+jinja2
+playwright
 sqlalchemy
-pydantic
 python-dotenv
+pydantic
