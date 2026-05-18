@@ -20,5 +20,6 @@ class AttachmentOut(AttachmentBase):
     file_path: str
     file_type: Optional[str] = None
     file_size: Optional[int] = None
+    file_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

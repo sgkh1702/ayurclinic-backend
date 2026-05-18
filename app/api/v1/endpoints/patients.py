@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -56,10 +56,12 @@ def list_patients(
 
 
 @router.get("/{patient_id}")
-def get_patient(patient_id: int, db: Session = Depends(get_db)):
+def get_patient(patient_id: int, request: Request, db: Session = Depends(get_db)):
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+
+    pdf_url = str(request.base_url).rstrip("/") + f"/patients/{patient.id}/casepapers/pdf"
 
     return {
         "id": patient.id,
@@ -79,7 +81,7 @@ def get_patient(patient_id: int, db: Session = Depends(get_db)):
         "family_history": patient.family_history,
         "ref_by": patient.ref_by,
         "doctor_id": patient.doctor_id,
-        "consolidated_pdf_url": f"http://localhost:8000/patients/{patient.id}/casepapers/pdf",
+        "consolidated_pdf_url": pdf_url,
     }
 
 

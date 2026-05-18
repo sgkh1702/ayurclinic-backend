@@ -1,6 +1,9 @@
+from datetime import date, datetime
+from pathlib import Path
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -11,9 +14,37 @@ from app.utils.pdf_casepaper import build_visit_pdf
 
 router = APIRouter(tags=["visits"])
 
+CASEPAPER_DIR = Path(r"D:\casepaper")
+CASEPAPER_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def format_ddmmyyyy(value) -> str:
+    if isinstance(value, datetime):
+        return value.strftime("%d%m%Y")
+    if isinstance(value, date):
+        return value.strftime("%d%m%Y")
+    if isinstance(value, str):
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").strftime("%d%m%Y")
+        except ValueError:
+            pass
+    return datetime.now().strftime("%d%m%Y")
+
+
+def build_casepaper_filename(visit: Visit) -> str:
+    visit_date_str = format_ddmmyyyy(visit.visit_date)
+    return f"CP-{visit.patient_id}-{visit_date_str}-V{visit.id}.pdf"
+
+
+async def save_casepaper_pdf(patient: Patient, visit: Visit) -> Path:
+    pdf_bytes = await build_visit_pdf(patient, visit)
+    file_path = CASEPAPER_DIR / build_casepaper_filename(visit)
+    file_path.write_bytes(pdf_bytes)
+    return file_path
+
 
 @router.post("/visits", response_model=VisitOut)
-def create_visit(payload: VisitCreate, db: Session = Depends(get_db)):
+async def create_visit(payload: VisitCreate, db: Session = Depends(get_db)):
     patient = db.query(Patient).filter(Patient.id == payload.patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
@@ -34,6 +65,12 @@ def create_visit(payload: VisitCreate, db: Session = Depends(get_db)):
     db.add(visit)
     db.commit()
     db.refresh(visit)
+
+    try:
+        await save_casepaper_pdf(patient, visit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Visit saved but PDF creation failed: {str(e)}")
+
     return visit
 
 
@@ -82,10 +119,14 @@ def get_visit(visit_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/visits/{visit_id}", response_model=VisitOut)
-def update_visit(visit_id: int, payload: VisitUpdate, db: Session = Depends(get_db)):
+async def update_visit(visit_id: int, payload: VisitUpdate, db: Session = Depends(get_db)):
     visit = db.query(Visit).filter(Visit.id == visit_id).first()
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
+
+    patient = db.query(Patient).filter(Patient.id == visit.patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
 
     update_data = payload.model_dump(exclude_unset=True)
 
@@ -108,32 +149,35 @@ def update_visit(visit_id: int, payload: VisitUpdate, db: Session = Depends(get_
 
     db.commit()
     db.refresh(visit)
+
+    try:
+        await save_casepaper_pdf(patient, visit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Visit updated but PDF creation failed: {str(e)}")
+
     return visit
 
 
 @router.get("/visits/{visit_id}/casepaper/pdf")
 async def get_visit_casepaper_pdf(visit_id: int, db: Session = Depends(get_db)):
-    try:
-        visit = db.query(Visit).filter(Visit.id == visit_id).first()
-        if not visit:
-            raise HTTPException(status_code=404, detail="Visit not found")
+    visit = db.query(Visit).filter(Visit.id == visit_id).first()
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
 
-        patient = db.query(Patient).filter(Patient.id == visit.patient_id).first()
-        if not patient:
-            raise HTTPException(status_code=404, detail="Patient not found")
+    patient = db.query(Patient).filter(Patient.id == visit.patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
 
-        pdf_bytes = await build_visit_pdf(patient, visit)
+    file_path = CASEPAPER_DIR / build_casepaper_filename(visit)
 
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f'inline; filename="visit_{visit.id}.pdf"'
-            }
-        )
+    if not file_path.exists():
+        try:
+            file_path = await save_casepaper_pdf(patient, visit)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
-    except Exception as e:
-        return Response(
-            content=f"PDF ERROR: {type(e).__name__}: {str(e)}",
-            media_type="text/plain"
-        )
+    return FileResponse(
+        path=str(file_path),
+        media_type="application/pdf",
+        filename=file_path.name,
+    )

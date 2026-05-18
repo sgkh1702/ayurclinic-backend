@@ -4,8 +4,12 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Project root directory (one level above "app")
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(PROJECT_ROOT, "ayurclinic.db")
+DB_PATH = r"D:\Ayurclinic\backend\ayurclinic.db"
 DATABASE_URL = f"sqlite:///{DB_PATH}"
+#DB_PATH = os.path.join(PROJECT_ROOT, "ayurclinic.db")
+#DATABASE_URL = f"sqlite:///{DB_PATH}"
+print("DATABASE_URL in backend:", DATABASE_URL)
+print("DB_PATH in backend:", DB_PATH)
 
 engine = create_engine(
     DATABASE_URL,
