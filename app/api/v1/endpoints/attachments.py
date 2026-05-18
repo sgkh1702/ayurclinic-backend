@@ -14,7 +14,7 @@ from app.schemas.attachment import AttachmentOut
 
 router = APIRouter(tags=["attachments"])
 
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/data/uploads")
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/tmp/uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
